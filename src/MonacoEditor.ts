@@ -1,6 +1,79 @@
 import { AbstractWraplet, Core, DefaultCore } from "wraplet";
 import { Storage, StorageValidators } from "wraplet/storage";
+
+// This is an AI-generated workaround for monaco-editor workers not working correctly in iframes.
+// Error it fixes is:
+// ```
+// Uncaught TypeError: Failed to execute 'importScripts' on 'WorkerGlobalScope': Module scripts don't support importScripts().
+// ```
+
+const inIframe = window.self !== window.top;
+if (typeof window !== "undefined" && inIframe) {
+  (window as any).MonacoEnvironment = {
+    getWorker: function (_workerId: string, label: string) {
+      // Get the base URL from the current script
+      const getBaseUrl = () => {
+        const scriptElements = document.getElementsByTagName("script");
+        for (let i = scriptElements.length - 1; i >= 0; i--) {
+          const src = scriptElements[i].src;
+          if (src && (src.includes("index.js") || src.includes("index.cjs"))) {
+            return src.substring(0, src.lastIndexOf("/") + 1);
+          }
+        }
+        // Fallback: try to get from current document location
+        return (
+          document.location.href.substring(
+            0,
+            document.location.href.lastIndexOf("/") + 1,
+          ) + "../dist/"
+        );
+      };
+
+      const baseUrl = getBaseUrl();
+
+      // Map label to worker file
+      const workerMap: Record<string, string> = {
+        json: "json.worker.js",
+        css: "css.worker.js",
+        scss: "css.worker.js",
+        less: "css.worker.js",
+        html: "html.worker.js",
+        handlebars: "html.worker.js",
+        razor: "html.worker.js",
+        typescript: "ts.worker.js",
+        javascript: "ts.worker.js",
+      };
+
+      const workerFile = workerMap[label] || "editor.worker.js";
+
+      // Create absolute URL - this is crucial for importScripts to work
+      let workerUrl: string;
+      if (
+        baseUrl.startsWith("http://") ||
+        baseUrl.startsWith("https://") ||
+        baseUrl.startsWith("file://")
+      ) {
+        // baseUrl is already absolute
+        workerUrl = baseUrl + workerFile;
+      } else {
+        // Convert relative to absolute
+        const a = document.createElement("a");
+        a.href = baseUrl + workerFile;
+        workerUrl = a.href;
+      }
+
+      // Create a blob-based worker to avoid CORS issues in iframes
+      const workerBlob = new Blob([`importScripts('${workerUrl}');`], {
+        type: "application/javascript",
+      });
+
+      return new Worker(URL.createObjectURL(workerBlob));
+    },
+  };
+}
+
 import * as monaco from "monaco-editor";
+
 import { editor, languages } from "monaco-editor";
 import IStandaloneCodeEditor = editor.IStandaloneCodeEditor;
 import { Editor } from "./types/Editor";
@@ -21,14 +94,13 @@ export type MonacoEditorOptions = {
   monacoOptions?: editor.IStandaloneEditorConstructionOptions;
   location?: "head" | "body";
   priority?: number;
+  trimDefaultValue?: boolean;
   attributes?: Record<string, string>;
-  valueSelector?: string;
 };
 
 type RequiredMonacoEditorOptions = Required<
-  Omit<MonacoEditorOptions, "valueSelector" | "attributes">
+  Omit<MonacoEditorOptions, "attributes">
 > & {
-  valueSelector?: MonacoEditorOptions["valueSelector"];
   attributes?: MonacoEditorOptions["attributes"];
 };
 
@@ -46,6 +118,7 @@ export class MonacoEditor
       monacoOptions: {},
       location: "body",
       priority: 0,
+      trimDefaultValue: true,
     };
 
     const validators: StorageValidators<MonacoEditorOptions> = {
@@ -56,9 +129,7 @@ export class MonacoEditor
         typeof data === "string" && ["head", "body"].includes(data),
       priority: (data: unknown) => Number.isInteger(data),
       attributes: (data: unknown) => typeof data === "object",
-      valueSelector: (data: unknown) =>
-        typeof data === "undefined" ||
-        (typeof data !== "undefined" && typeof data === "string"),
+      trimDefaultValue: (data: unknown) => typeof data === "boolean",
     };
 
     options.monacoOptions = {
@@ -82,6 +153,14 @@ export class MonacoEditor
         },
       },
     );
+
+    if (this.options.get("trimDefaultValue")) {
+      const monacoOptions = this.options.get("monacoOptions");
+      if (monacoOptions.value) {
+        monacoOptions.value = this.trimDefaultValue(monacoOptions.value);
+        this.options.set("monacoOptions", monacoOptions);
+      }
+    }
 
     this.validateOptions();
 
@@ -154,6 +233,35 @@ export class MonacoEditor
     }
 
     return monacoOptions["language"] as MonacoEditorLanguages;
+  }
+
+  private trimDefaultValue(content: string): string {
+    const lines = content.split("\n");
+
+    // Find the first non-empty line to determine base indentation
+    const firstNonEmptyLine = lines.find((line) => line.trim().length > 0);
+
+    if (!firstNonEmptyLine) {
+      return content.trim();
+    }
+
+    // Count leading spaces on the first non-empty line
+    const leadingSpaces = firstNonEmptyLine.search(/\S|$/);
+
+    // Trim the same number of spaces from each line
+    const trimmedLines = lines.map((line) => {
+      // Only trim if the line has at least that many leading spaces
+      if (
+        line.length >= leadingSpaces &&
+        line.substring(0, leadingSpaces).trim() === ""
+      ) {
+        return line.substring(leadingSpaces);
+      }
+      return line;
+    });
+
+    // Join back and trim any leading/trailing empty lines
+    return trimmedLines.join("\n").trim();
   }
 
   public static create(

@@ -1,12 +1,12 @@
 {
-  "name": "js-exhibition-wraplet",
+  "name": "exhibition-wraplet",
   "version": "0.1.0",
-  "description": "Managing collections.",
+  "description": "Library for showcasing your js/ts code snippets.",
   "main": "dist/index.js",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/wraplet/js-exhibition-wraplet.git"
+    "url": "https://github.com/wraplet/exhibition-wraplet.git"
   },
   "scripts": {
     "setup": "yarn install",

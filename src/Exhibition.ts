@@ -14,6 +14,7 @@ import { ElementStorage, Storage } from "wraplet/storage";
 
 export type ExhibitionOptions = {
   refreshPreviewOnInit?: boolean;
+  updaterSelector?: string;
 };
 
 export type ExhibitionMapOptions = {
@@ -55,6 +56,7 @@ export class Exhibition extends AbstractWraplet<
     super(core);
     const defaultOptions: Required<ExhibitionOptions> = {
       refreshPreviewOnInit: true,
+      updaterSelector: "[data-js-exhibition-updater]",
     };
     this.options = new ElementStorage<Required<ExhibitionOptions>>(
       this.node,
@@ -62,21 +64,23 @@ export class Exhibition extends AbstractWraplet<
       { ...defaultOptions, ...options },
       {
         refreshPreviewOnInit: (data: unknown) => typeof data === "boolean",
+        updaterSelector: (data: unknown) => typeof data === "string",
       },
     );
 
-    const updaterElement = this.node.querySelector(
-      "[data-js-exhibition-updater]",
+    const updaterElements = this.node.querySelectorAll(
+      this.options.get("updaterSelector"),
     );
-    if (!updaterElement) {
-      throw new Error("Missing updater element");
-    }
+
     if (this.options.get("refreshPreviewOnInit")) {
       this.updatePreview();
     }
-    this.core.addEventListener(updaterElement, "click", () => {
-      this.updatePreview();
-    });
+
+    for (const element of updaterElements) {
+      this.core.addEventListener(element, "click", () => {
+        this.updatePreview();
+      });
+    }
   }
 
   public addEditor(editor: Editor): void {

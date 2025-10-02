@@ -41,7 +41,13 @@ const baseConfig: webpack.Configuration = {
         new webpack.DefinePlugin({
             BASEPATH: JSON.stringify(""),
         }),
-        new MonacoWebpackPlugin(),
+        new MonacoWebpackPlugin({
+          // Specify which languages to include
+          languages: ['typescript', 'javascript', 'html', 'css'],
+          // Customize worker options
+          customLanguages: [],
+          globalAPI: false,
+        }),
     ],
     experiments: {
         outputModule: true,
@@ -69,6 +75,9 @@ function createOutputConfig(
             library: {
                 type: type,
             },
+            globalObject: 'self',
+            publicPath: 'auto',
+            chunkFilename: '[name].index.js',
         },
     };
 }
