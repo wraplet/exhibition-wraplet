@@ -7,8 +7,7 @@ import { Storage, StorageValidators } from "wraplet/storage";
 // Uncaught TypeError: Failed to execute 'importScripts' on 'WorkerGlobalScope': Module scripts don't support importScripts().
 // ```
 
-const inIframe = window.self !== window.top;
-if (typeof window !== "undefined" && inIframe) {
+if (typeof window !== "undefined") {
   (window as any).MonacoEnvironment = {
     getWorker: function (_workerId: string, label: string) {
       // Get the base URL from the current script

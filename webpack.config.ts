@@ -77,7 +77,6 @@ function createOutputConfig(
                 type: type,
             },
             globalObject: 'self',
-            publicPath: 'auto',
             chunkFilename: '[name].index.js',
         },
     };
