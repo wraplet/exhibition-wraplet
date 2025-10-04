@@ -7,7 +7,10 @@ export type PreviewBaseValue = {
   priority: number;
 };
 
-export type IsSingleTag = { attributes: Record<string, string>; tag: string };
+export type IsSingleTag = {
+  tagAttributes: Record<string, string>;
+  tag: string;
+};
 
 export type PreviewHTMLValue = PreviewBaseValue & {
   type: "html";

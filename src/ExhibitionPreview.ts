@@ -53,8 +53,8 @@ export class ExhibitionPreview extends AbstractWraplet<{}, HTMLIFrameElement> {
   private appendTag(item: Extract<PreviewValue, IsSingleTag>): void {
     const document = this.getIFrameDocument();
     const node = document.createElement(item.tag);
-    if (item.attributes) {
-      for (const [key, value] of Object.entries(item.attributes)) {
+    if (item.tagAttributes) {
+      for (const [key, value] of Object.entries(item.tagAttributes)) {
         node.setAttribute(key, value);
       }
     }

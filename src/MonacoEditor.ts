@@ -94,13 +94,13 @@ export type MonacoEditorOptions = {
   location?: "head" | "body";
   priority?: number;
   trimDefaultValue?: boolean;
-  attributes?: Record<string, string>;
+  tagAttributes?: Record<string, string>;
 };
 
 type RequiredMonacoEditorOptions = Required<
-  Omit<MonacoEditorOptions, "attributes">
+  Omit<MonacoEditorOptions, "tagAttributes">
 > & {
-  attributes?: MonacoEditorOptions["attributes"];
+  tagAttributes?: MonacoEditorOptions["tagAttributes"];
 };
 
 export class MonacoEditor
@@ -127,7 +127,7 @@ export class MonacoEditor
       location: (data: unknown) =>
         typeof data === "string" && ["head", "body"].includes(data),
       priority: (data: unknown) => Number.isInteger(data),
-      attributes: (data: unknown) => typeof data === "object",
+      tagAttributes: (data: unknown) => typeof data === "object",
       trimDefaultValue: (data: unknown) => typeof data === "boolean",
     };
 
@@ -185,7 +185,7 @@ export class MonacoEditor
     };
 
     if (isSingleTagValue(value)) {
-      value["attributes"] = this.options.get("attributes") ?? {};
+      value["tagAttributes"] = this.options.get("tagAttributes") ?? {};
       value["tag"] = getTagFromType(value.type);
     }
 
@@ -202,9 +202,9 @@ export class MonacoEditor
 
     const type = getTypeFromLanguage(this.getLanguage());
     if (!isSingleTagType(type)) {
-      if (this.options.get("attributes")) {
+      if (this.options.get("tagAttributes")) {
         throw new Error(
-          "'attributes' option is only allowed for single tag types",
+          "'tagAttributes' option is only allowed for single tag types",
         );
       }
     }

@@ -7,3 +7,5 @@ export { MonacoEditor } from "./MonacoEditor";
 export type { MonacoEditorOptions } from "./MonacoEditor";
 
 export type { Editor } from "./types/Editor";
+
+export * as monaco from "monaco-editor";
