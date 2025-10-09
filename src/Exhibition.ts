@@ -9,8 +9,9 @@ import { ExhibitionPreview } from "./ExhibitionPreview";
 import { MonacoEditor, MonacoEditorOptions } from "./MonacoEditor";
 import { editor } from "monaco-editor";
 import { exhibitionDefaultAttribute } from "./selectors";
-import { Editor } from "./types/Editor";
+import { DocumentAltererWraplet } from "./types/DocumentAltererWraplet";
 import { ElementStorage, Storage } from "wraplet/storage";
+import { DocumentAlterer } from "./types/DocumentAlterer";
 
 export type ExhibitionOptions = {
   refreshPreviewOnInit?: boolean;
@@ -27,8 +28,8 @@ const ExhibitionMap = {
     selector: "[data-js-exhibition-editor]" as string | undefined,
     multiple: true,
     required: false,
-    Class: MonacoEditor as Constructable<Editor>,
-    args: [] as [] | [MonacoEditorOptions],
+    Class: MonacoEditor as Constructable<DocumentAltererWraplet>,
+    args: [] as unknown[],
   },
   preview: {
     selector: "iframe[data-js-exhibition-preview]",
@@ -36,12 +37,6 @@ const ExhibitionMap = {
     required: true,
     Class: ExhibitionPreview,
   },
-  //updater: {
-  //  selector: "[data-js-exhibition-update]",
-  //  multiple: false,
-  //  required: true,
-  //  Class: ExhibitionPreview,
-  //},
 } satisfies WrapletChildrenMap;
 
 export class Exhibition extends AbstractWraplet<
@@ -68,6 +63,13 @@ export class Exhibition extends AbstractWraplet<
       },
     );
 
+    for (const editor of this.children.editors) {
+      this.children.preview.addDocumentAlterer(
+        editor.getDocumentAlterer(),
+        editor.getPriority(),
+      );
+    }
+
     const updaterElements = this.node.querySelectorAll(
       this.options.get("updaterSelector"),
     );
@@ -83,8 +85,16 @@ export class Exhibition extends AbstractWraplet<
     }
   }
 
-  public addEditor(editor: Editor): void {
+  public addEditor(editor: DocumentAltererWraplet): void {
     this.children.editors.add(editor);
+    this.addPreviewAlterer(editor.getDocumentAlterer(), editor.getPriority());
+  }
+
+  public addPreviewAlterer(
+    alterer: DocumentAlterer,
+    priority: number = 0,
+  ): void {
+    this.children.preview.addDocumentAlterer(alterer, priority);
   }
 
   public getPreview(): ExhibitionPreview {
@@ -92,12 +102,7 @@ export class Exhibition extends AbstractWraplet<
   }
 
   public async updatePreview(): Promise<void> {
-    for (const editor of this.children.editors) {
-      const value = await editor.getValue();
-      this.children.preview.append(value);
-    }
-
-    this.children.preview.flush();
+    await this.children.preview.update();
   }
 
   public static createMultiple(

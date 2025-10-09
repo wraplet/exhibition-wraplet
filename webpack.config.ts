@@ -47,7 +47,6 @@ const baseConfig: webpack.Configuration = {
           // Customize worker options
           customLanguages: [],
           globalAPI: false,
-          publicPath: 'auto',
         }),
     ],
     experiments: {

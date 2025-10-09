@@ -1,0 +1,22 @@
+name: Tests
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+  packages: read
+jobs:
+  test:
+    name: Testing code.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v3.5.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Installing dependencies.
+        run: yarn install
+      - name: Building code.
+        run: yarn run build
+      - name: Running tests.
+        run: yarn run tests-setup;yarn run tests
+      - name: Linting check.
+        run: yarn run lint

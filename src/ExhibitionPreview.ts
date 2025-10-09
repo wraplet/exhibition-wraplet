@@ -1,29 +1,54 @@
 import { AbstractWraplet, Core } from "wraplet";
-import { PreviewValue, IsSingleTag } from "./types/PreviewValue";
-import { isSingleTagValue } from "./TypeMap";
+import { DocumentAlterer } from "./types/DocumentAlterer";
+
+type AltererData = {
+  callback: DocumentAlterer;
+  priority: number;
+};
 
 export class ExhibitionPreview extends AbstractWraplet<{}, HTMLIFrameElement> {
   constructor(core: Core<{}, HTMLIFrameElement>) {
     super(core);
   }
 
-  private items: PreviewValue[] = [];
+  private alterers: AltererData[] = [];
+  private currentBlobUrl: string | null = null;
 
-  public flush(): void {
+  public addDocumentAlterer(
+    alterer: DocumentAlterer,
+    priority: number = 0,
+  ): void {
+    this.alterers.push({
+      callback: alterer,
+      priority: priority,
+    });
+  }
+
+  public async update(): Promise<void> {
+    const doc = document.implementation.createHTMLDocument();
+    this.alterers.sort((a, b) => a.priority - b.priority);
+    for (const alterer of this.alterers) {
+      await alterer.callback(doc);
+    }
+
+    // Revoke previous blob URL
+    if (this.currentBlobUrl) {
+      URL.revokeObjectURL(this.currentBlobUrl);
+    }
+
+    const htmlContent = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+    this.currentBlobUrl = URL.createObjectURL(blob);
+    this.node.src = this.currentBlobUrl;
+
     this.node.onload = () => {
-      this.appendItemsToDocument(this.items);
-      this.items = [];
-
-      // Make sure it won't run again.
-      this.node.onload = null;
       this.updateHeight();
+      this.node.onload = null;
     };
-    const document = this.getIFrameDocument();
-    document.location.reload();
   }
 
   public updateHeight(): void {
-    const iframeWindow = this.getWindow();
+    const iframeWindow = this.getIFrameWindow();
     const iframeDocument = this.getIFrameDocument();
     const el = iframeDocument.querySelector("html");
     if (!el) {
@@ -39,44 +64,6 @@ export class ExhibitionPreview extends AbstractWraplet<{}, HTMLIFrameElement> {
     this.node.height = height + "px";
   }
 
-  public append(value: PreviewValue): void {
-    this.items.push(value);
-  }
-
-  private appendHTML(item: Exclude<PreviewValue, IsSingleTag>): void {
-    const document = this.getIFrameDocument();
-    const node = document.createElement("div");
-    node.innerHTML = item.content;
-    this.getIFrameDocument()[item.location].appendChild(node);
-  }
-
-  private appendTag(item: Extract<PreviewValue, IsSingleTag>): void {
-    const document = this.getIFrameDocument();
-    const node = document.createElement(item.tag);
-    if (item.tagAttributes) {
-      for (const [key, value] of Object.entries(item.tagAttributes)) {
-        node.setAttribute(key, value);
-      }
-    }
-    node.textContent = item.content;
-    document[item.location].appendChild(node);
-  }
-
-  private appendItemsToDocument(items: PreviewValue[]): void {
-    items.sort((a, b) => a.priority - b.priority);
-    for (const item of items) {
-      this.appendItemToDocument(item);
-    }
-  }
-
-  private appendItemToDocument(item: PreviewValue): void {
-    if (isSingleTagValue(item)) {
-      this.appendTag(item);
-    } else {
-      this.appendHTML(item);
-    }
-  }
-
   private getIFrameDocument(): Document {
     const iframeDocument = this.node.contentDocument;
     if (!iframeDocument) {
@@ -86,10 +73,10 @@ export class ExhibitionPreview extends AbstractWraplet<{}, HTMLIFrameElement> {
     return iframeDocument;
   }
 
-  private getWindow(): Window {
+  private getIFrameWindow(): Window {
     const window = this.node.contentWindow;
     if (!window) {
-      throw new Error("Window is not available.");
+      throw new Error("IFrame window is not available.");
     }
     return window;
   }

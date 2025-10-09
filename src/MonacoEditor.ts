@@ -1,92 +1,20 @@
 import { AbstractWraplet, Core, DefaultCore } from "wraplet";
 import { Storage, StorageValidators } from "wraplet/storage";
 
-// This is an AI-generated workaround for monaco-editor workers not working correctly in iframes.
-// Error it fixes is:
-// ```
-// Uncaught TypeError: Failed to execute 'importScripts' on 'WorkerGlobalScope': Module scripts don't support importScripts().
-// ```
-
-if (typeof window !== "undefined") {
-  (window as any).MonacoEnvironment = {
-    getWorker: function (_workerId: string, label: string) {
-      // Get the base URL from the current script
-      const getBaseUrl = () => {
-        const scriptElements = document.getElementsByTagName("script");
-        for (let i = scriptElements.length - 1; i >= 0; i--) {
-          const src = scriptElements[i].src;
-          if (src && (src.includes("index.js") || src.includes("index.cjs"))) {
-            return src.substring(0, src.lastIndexOf("/") + 1);
-          }
-        }
-        // Fallback: try to get from current document location
-        return (
-          document.location.href.substring(
-            0,
-            document.location.href.lastIndexOf("/") + 1,
-          ) + "../dist/"
-        );
-      };
-
-      const baseUrl = getBaseUrl();
-
-      // Map label to worker file
-      const workerMap: Record<string, string> = {
-        json: "json.worker.js",
-        css: "css.worker.js",
-        scss: "css.worker.js",
-        less: "css.worker.js",
-        html: "html.worker.js",
-        handlebars: "html.worker.js",
-        razor: "html.worker.js",
-        typescript: "ts.worker.js",
-        javascript: "ts.worker.js",
-      };
-
-      const workerFile = workerMap[label] || "editor.worker.js";
-
-      // Create absolute URL - this is crucial for importScripts to work
-      let workerUrl: string;
-      if (
-        baseUrl.startsWith("http://") ||
-        baseUrl.startsWith("https://") ||
-        baseUrl.startsWith("file://")
-      ) {
-        // baseUrl is already absolute
-        workerUrl = baseUrl + workerFile;
-      } else {
-        // Convert relative to absolute
-        const a = document.createElement("a");
-        a.href = baseUrl + workerFile;
-        workerUrl = a.href;
-      }
-
-      // Create a blob-based worker to avoid CORS issues in iframes
-      const workerBlob = new Blob([`importScripts('${workerUrl}');`], {
-        type: "application/javascript",
-      });
-
-      return new Worker(URL.createObjectURL(workerBlob));
-    },
-  };
-}
-
 import * as monaco from "monaco-editor";
 
 import { editor, languages } from "monaco-editor";
 import IStandaloneCodeEditor = editor.IStandaloneCodeEditor;
-import { Editor } from "./types/Editor";
+import { DocumentAltererWraplet } from "./types/DocumentAltererWraplet";
 import { ElementStorage } from "wraplet/storage";
 import { defaultOptionsAttribute } from "./selectors";
-import { PreviewValue } from "./types/PreviewValue";
 import {
   getTagFromType,
   getTypeFromLanguage,
   isSingleTagType,
-  isSingleTagValue,
   MonacoEditorLanguages,
-  ValueTypes,
 } from "./TypeMap";
+import { DocumentAlterer } from "./types/DocumentAlterer";
 
 export type MonacoEditorOptions = {
   optionsAttribute?: string;
@@ -105,7 +33,7 @@ type RequiredMonacoEditorOptions = Required<
 
 export class MonacoEditor
   extends AbstractWraplet<{}, HTMLElement>
-  implements Editor
+  implements DocumentAltererWraplet
 {
   private editor: IStandaloneCodeEditor;
   private options: Storage<RequiredMonacoEditorOptions>;
@@ -169,27 +97,37 @@ export class MonacoEditor
     );
   }
 
-  public async getValue(): Promise<PreviewValue> {
+  public getPriority(): number {
+    return this.options.get("priority");
+  }
+
+  public async alterDocument(document: Document): Promise<void> {
     const language = this.getLanguage();
     const content =
       language === "typescript"
         ? await this.getTSValueAsJS()
         : this.editor.getValue();
 
+    const location = this.options.get("location");
+
     const type = getTypeFromLanguage(language);
-    const value: Partial<PreviewValue> & { type: ValueTypes } = {
-      content: content,
-      type: type,
-      location: this.options.get("location"),
-      priority: this.options.get("priority"),
-    };
 
-    if (isSingleTagValue(value)) {
-      value["tagAttributes"] = this.options.get("tagAttributes") ?? {};
-      value["tag"] = getTagFromType(value.type);
+    if (isSingleTagType(type)) {
+      const tag = getTagFromType(type);
+      const tagAttributes = this.options.get("tagAttributes") ?? {};
+      const tagElement = document.createElement(tag);
+      for (const [key, value] of Object.entries(tagAttributes)) {
+        tagElement.setAttribute(key, value);
+      }
+      tagElement.innerHTML = content;
+      document[location].appendChild(tagElement);
+      return;
     }
+    document[location].innerHTML += content;
+  }
 
-    return value as PreviewValue;
+  public getDocumentAlterer(): DocumentAlterer {
+    return this.alterDocument.bind(this);
   }
 
   /**
