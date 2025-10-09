@@ -14,7 +14,11 @@ export default {
       lines: 100,
     },
   },
+  testPathIgnorePatterns: [
+    "/tests/functional/",
+  ],
   coveragePathIgnorePatterns: [
-    'index.ts',
+    "index.ts",
+    "/tests/functional/",
   ],
 };
