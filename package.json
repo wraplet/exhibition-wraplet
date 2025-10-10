@@ -1,9 +1,17 @@
 {
   "name": "exhibitionjs",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Library for showcasing your js/ts code snippets.",
   "main": "dist/index.js",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/wraplet/exhibitionjs.git"
@@ -24,8 +32,8 @@
   "author": "Łukasz Zaroda",
   "license": "MIT",
   "dependencies": {
-    "monaco-editor": "^0.54.0",
-    "wraplet": "^0.23.0"
+    "wraplet": "^0.25.0",
+    "monaco-editor": "^0.54.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",

@@ -1,7 +1,37 @@
 import { AbstractWraplet, Core, DefaultCore } from "wraplet";
 import { Storage, StorageValidators } from "wraplet/storage";
 
-import * as monaco from "monaco-editor";
+declare global {
+  interface Window {
+    ExhibitionJSMonacoWorkersPath?: string;
+  }
+}
+console.log(window.ExhibitionJSMonacoWorkersPath);
+
+if (window.ExhibitionJSMonacoWorkersPath) {
+  window.MonacoEnvironment = {
+    getWorkerUrl: function (_workerId, label) {
+      // Map label to worker file
+      const workerMap: Record<string, string> = {
+        json: "json.worker.js",
+        css: "css.worker.js",
+        scss: "css.worker.js",
+        less: "css.worker.js",
+        html: "html.worker.js",
+        handlebars: "html.worker.js",
+        razor: "html.worker.js",
+        typescript: "ts.worker.js",
+        javascript: "ts.worker.js",
+      };
+
+      const workerFile = workerMap[label] || "editor.worker.js";
+
+      console.log(window.ExhibitionJSMonacoWorkersPath + workerFile);
+
+      return window.ExhibitionJSMonacoWorkersPath + workerFile;
+    },
+  };
+}
 
 import { editor, languages } from "monaco-editor";
 import IStandaloneCodeEditor = editor.IStandaloneCodeEditor;
@@ -26,7 +56,7 @@ export type MonacoEditorOptions = {
 };
 
 type RequiredMonacoEditorOptions = Required<
-  Omit<MonacoEditorOptions, "tagAttributes">
+  Omit<MonacoEditorOptions, "tagAttributes" | "monacoEditorNamespace">
 > & {
   tagAttributes?: MonacoEditorOptions["tagAttributes"];
 };
@@ -70,13 +100,8 @@ export class MonacoEditor
       { ...defaultOptions, ...options },
       validators,
       {
-        elementOptionsMerger: (defaults, elementOptions) => {
-          elementOptions.monacoOptions = {
-            ...defaults.monacoOptions,
-            ...elementOptions.monacoOptions,
-          };
-
-          return { ...defaults, ...elementOptions };
+        elementOptionsMerger: (defaults, options) => {
+          return { ...defaults, ...options };
         },
       },
     );
@@ -91,10 +116,8 @@ export class MonacoEditor
 
     this.validateOptions();
 
-    this.editor = monaco.editor.create(
-      this.node,
-      this.options.get("monacoOptions"),
-    );
+    const monacoOptions = this.options.get("monacoOptions");
+    this.editor = editor.create(this.node, monacoOptions);
   }
 
   public getPriority(): number {
