@@ -2,16 +2,13 @@ import webpack from "webpack";
 import path from "path";
 import {fileURLToPath} from "url";
 
-const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
-
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-//const devMode = process.env.NODE_ENV !== "production";
+const devMode = process.env.NODE_ENV !== "production";
 
 const baseConfig: webpack.Configuration = {
-  devtool: "source-map",
+  devtool: devMode ? "source-map" : false,
   resolve: {
     extensions: [".tsx", ".ts", ".js"],
   },
@@ -42,17 +39,12 @@ const baseConfig: webpack.Configuration = {
     new webpack.DefinePlugin({
       BASEPATH: JSON.stringify(""),
     }),
-    new MonacoWebpackPlugin({
-      // Specify which languages to include
-      languages: ['typescript', 'javascript', 'html', 'css'],
-      // Customize worker options
-      customLanguages: [],
-      globalAPI: false,
-      publicPath: '/',
-    }),
   ],
   experiments: {
     outputModule: true,
+  },
+  externals: {
+    "monaco-editor": "monaco-editor",
   },
 };
 

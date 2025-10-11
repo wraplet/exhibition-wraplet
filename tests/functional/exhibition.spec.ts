@@ -13,9 +13,10 @@ test("scripts execute inside iframe preview", async ({ page }) => {
 
   // Check if iframe element exists
   const iframeExists = await page
-    .locator("#section-basic-exhibition [data-js-exhibition-preview]")
+    .locator("[data-js-exhibition-preview]")
     .count();
-  console.log("Iframe elements found:", iframeExists);
+
+  expect(iframeExists).toBe(1);
 
   const iframe = page.frameLocator("[data-js-exhibition-preview]");
 

@@ -13,9 +13,14 @@ lint:
 tests:
 	yarn run tests
 
-build:
-	rm -r ${MAKEFILE_DIR}/dist/*
+cleanup-dist:
+	test -d ${MAKEFILE_DIR}/dist && rm -r ${MAKEFILE_DIR}/dist
+
+build: cleanup-dist
 	yarn run build
+
+build-dev: cleanup-dist
+	yarn run dev:build
 
 publish: build
 	yarn publish --access public

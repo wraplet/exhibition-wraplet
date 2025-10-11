@@ -1,40 +1,7 @@
 import { AbstractWraplet, Core, DefaultCore } from "wraplet";
 import { Storage, StorageValidators } from "wraplet/storage";
 
-declare global {
-  interface Window {
-    ExhibitionJSMonacoWorkersPath?: string;
-  }
-}
-console.log(window.ExhibitionJSMonacoWorkersPath);
-
-if (window.ExhibitionJSMonacoWorkersPath) {
-  window.MonacoEnvironment = {
-    getWorkerUrl: function (_workerId, label) {
-      // Map label to worker file
-      const workerMap: Record<string, string> = {
-        json: "json.worker.js",
-        css: "css.worker.js",
-        scss: "css.worker.js",
-        less: "css.worker.js",
-        html: "html.worker.js",
-        handlebars: "html.worker.js",
-        razor: "html.worker.js",
-        typescript: "ts.worker.js",
-        javascript: "ts.worker.js",
-      };
-
-      const workerFile = workerMap[label] || "editor.worker.js";
-
-      console.log(window.ExhibitionJSMonacoWorkersPath + workerFile);
-
-      return window.ExhibitionJSMonacoWorkersPath + workerFile;
-    },
-  };
-}
-
-import { editor, languages } from "monaco-editor";
-import IStandaloneCodeEditor = editor.IStandaloneCodeEditor;
+import * as monaco from "monaco-editor";
 import { DocumentAltererWraplet } from "./types/DocumentAltererWraplet";
 import { ElementStorage } from "wraplet/storage";
 import { defaultOptionsAttribute } from "./selectors";
@@ -48,7 +15,8 @@ import { DocumentAlterer } from "./types/DocumentAlterer";
 
 export type MonacoEditorOptions = {
   optionsAttribute?: string;
-  monacoOptions?: editor.IStandaloneEditorConstructionOptions;
+  monacoEditorModule: typeof monaco;
+  monacoOptions?: monaco.editor.IStandaloneEditorConstructionOptions;
   location?: "head" | "body";
   priority?: number;
   trimDefaultValue?: boolean;
@@ -56,18 +24,20 @@ export type MonacoEditorOptions = {
 };
 
 type RequiredMonacoEditorOptions = Required<
-  Omit<MonacoEditorOptions, "tagAttributes" | "monacoEditorNamespace">
+  Omit<MonacoEditorOptions, "tagAttributes">
 > & {
   tagAttributes?: MonacoEditorOptions["tagAttributes"];
 };
 
 export class MonacoEditor
-  extends AbstractWraplet<{}, HTMLElement>
+  extends AbstractWraplet<HTMLElement>
   implements DocumentAltererWraplet
 {
-  private editor: IStandaloneCodeEditor;
+  private monacoEditorModule: typeof monaco;
+  private editor: monaco.editor.IStandaloneCodeEditor;
   private options: Storage<RequiredMonacoEditorOptions>;
-  constructor(core: Core<{}, HTMLElement>, options: MonacoEditorOptions = {}) {
+
+  constructor(core: Core<HTMLElement>, options: MonacoEditorOptions) {
     super(core);
 
     const defaultOptions: RequiredMonacoEditorOptions = {
@@ -76,6 +46,7 @@ export class MonacoEditor
       location: "body",
       priority: 0,
       trimDefaultValue: true,
+      monacoEditorModule: options.monacoEditorModule,
     };
 
     const validators: StorageValidators<MonacoEditorOptions> = {
@@ -87,6 +58,8 @@ export class MonacoEditor
       priority: (data: unknown) => Number.isInteger(data),
       tagAttributes: (data: unknown) => typeof data === "object",
       trimDefaultValue: (data: unknown) => typeof data === "boolean",
+      monacoEditorModule: (data: unknown) =>
+        data !== null && typeof data === "object",
     };
 
     options.monacoOptions = {
@@ -106,6 +79,8 @@ export class MonacoEditor
       },
     );
 
+    this.monacoEditorModule = this.options.get("monacoEditorModule");
+
     if (this.options.get("trimDefaultValue")) {
       const monacoOptions = this.options.get("monacoOptions");
       if (monacoOptions.value) {
@@ -117,19 +92,34 @@ export class MonacoEditor
     this.validateOptions();
 
     const monacoOptions = this.options.get("monacoOptions");
-    this.editor = editor.create(this.node, monacoOptions);
+    this.monacoEditorModule.languages.typescript.typescriptDefaults.setEagerModelSync(
+      true,
+    );
+    const model = this.monacoEditorModule.editor.createModel(
+      this.options.get("monacoOptions").value || "",
+      this.getLanguage(),
+      this.monacoEditorModule.Uri.parse(`file:///${this.getLanguage()}.ts`),
+    );
+
+    const monacoEditorModule = this.options.get("monacoEditorModule");
+    this.editor = monacoEditorModule.editor.create(this.node, {
+      ...monacoOptions,
+      ...{ model: model },
+    });
   }
 
   public getPriority(): number {
     return this.options.get("priority");
   }
 
+  public getValue(): string {
+    return this.editor.getValue();
+  }
+
   public async alterDocument(document: Document): Promise<void> {
     const language = this.getLanguage();
     const content =
-      language === "typescript"
-        ? await this.getTSValueAsJS()
-        : this.editor.getValue();
+      language === "typescript" ? await this.getTSValueAsJS() : this.getValue();
 
     const location = this.options.get("location");
 
@@ -173,15 +163,62 @@ export class MonacoEditor
 
   private async getTSValueAsJS() {
     const model = this.editor.getModel();
+    if (!model) throw new Error("Model is not available");
 
-    if (!model) {
-      throw new Error("Model is not available");
+    // Make sure TypeScript eager sync is enabled
+    this.monacoEditorModule.languages.typescript.typescriptDefaults.setEagerModelSync(
+      true,
+    );
+
+    // Ensure we're using file:/// URI
+    const uri = model.uri;
+    if (uri.scheme !== "file") {
+      throw new Error(`Model must use file:// URI, got: ${uri.toString()}`);
     }
 
-    const worker = await languages.typescript.getTypeScriptWorker();
-    const proxy = await worker(model.uri);
+    // Get worker getter
+    const getWorker = async (
+      attempts: number = 10,
+    ): Promise<
+      | ((
+          ...uris: monaco.Uri[]
+        ) => Promise<monaco.languages.typescript.TypeScriptWorker>)
+      | null
+    > => {
+      try {
+        return await this.monacoEditorModule.languages.typescript.getTypeScriptWorker();
+      } catch (error) {
+        if (error !== "TypeScript not registered!") throw error;
+        if (attempts <= 0) return null;
+        await new Promise((r) => setTimeout(r, 200));
+        return getWorker(attempts - 1);
+      }
+    };
 
-    const { outputFiles } = await proxy.getEmitOutput(model.uri.toString());
+    const workerGetter = await getWorker();
+    if (!workerGetter)
+      throw new Error("Timeout: Could not get TypeScript worker");
+
+    const worker = await workerGetter(uri);
+
+    // 🔸 Wait until the worker actually knows this file
+    // Call something lightweight to force registration
+    for (let i = 0; i < 20; i++) {
+      try {
+        await worker.getSemanticDiagnostics(uri.toString());
+        break; // success — worker now recognizes the file
+      } catch (err) {
+        if (/Could not find source file/.test(String(err))) {
+          await new Promise((r) => setTimeout(r, 250));
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    // Now it's safe to call getEmitOutput
+    const { outputFiles } = await worker.getEmitOutput(uri.toString());
+    if (!outputFiles.length) throw new Error("No JS output produced");
     return outputFiles[0].text;
   }
 
@@ -226,7 +263,7 @@ export class MonacoEditor
 
   public static create(
     element: HTMLElement,
-    options: MonacoEditorOptions = {},
+    options: MonacoEditorOptions,
   ): MonacoEditor {
     const core = new DefaultCore(element, {});
     return new MonacoEditor(core, options);

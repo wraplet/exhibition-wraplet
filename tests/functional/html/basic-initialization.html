@@ -49,24 +49,37 @@
         </div>
     </div>
 </div>
-
-<script type="module">
-    import { Exhibition } from "/dist/index.js";
-
-    // These values will be overwritten by the options put directly on the elements.
-    const defaultMonacoOptions = {
-        value: "",
-        minimap: {
-            enabled: false,
-        },
-        scrollBeyondLastLine: false,
-    };
-
-    // We can change the default attribute identifying the Exhibition instance and its dependencies
-    // by modifying the dependency map / map options.
-    Exhibition.createMultiple(document.body, "data-js-exhibition", {}, {
-        defaultMonacoOptions: defaultMonacoOptions,
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.54.0/min/vs/loader.js"></script>
+<script>
+    require.config({
+        paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.54.0/min/vs' }
     });
+    require(['vs/editor/editor.main'], async function () {
+        const ExhibitionModule = await import("/dist/index.js");
+        /** @type {typeof Exhibition} */
+        const Exhibition = ExhibitionModule.Exhibition;
+
+        // These values will be overwritten by the options put directly on the elements.
+        const defaultMonacoOptions = {
+            value: "",
+            minimap: {
+                enabled: false,
+            },
+            scrollBeyondLastLine: false,
+        };
+
+        // We can change the default attribute identifying the Exhibition instance and its dependencies
+        // by modifying the dependency map / map options.
+        const exh = Exhibition.createMultiple(document.body, "data-js-exhibition", Exhibition.getMapWithMonacoEditor({
+            monacoEditorModule: monaco,
+            monacoOptions: defaultMonacoOptions,
+        }));
+
+        exh.forEach(exh => {
+            exh.updatePreview();
+        });
+    });
+
 </script>
 </body>
 </html>

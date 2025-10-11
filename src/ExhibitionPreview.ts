@@ -1,4 +1,4 @@
-import { AbstractWraplet, Core } from "wraplet";
+import { AbstractWraplet } from "wraplet";
 import { DocumentAlterer } from "./types/DocumentAlterer";
 
 type AltererData = {
@@ -6,11 +6,7 @@ type AltererData = {
   priority: number;
 };
 
-export class ExhibitionPreview extends AbstractWraplet<{}, HTMLIFrameElement> {
-  constructor(core: Core<{}, HTMLIFrameElement>) {
-    super(core);
-  }
-
+export class ExhibitionPreview extends AbstractWraplet<HTMLIFrameElement> {
   private alterers: AltererData[] = [];
   private currentBlobUrl: string | null = null;
 
