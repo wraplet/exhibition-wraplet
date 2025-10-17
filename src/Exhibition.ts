@@ -77,6 +77,10 @@ export class Exhibition extends AbstractWraplet<
         this.updatePreview();
       });
     }
+
+    if (this.options.get("refreshPreviewOnInit")) {
+      this.updatePreview();
+    }
   }
 
   public addEditor(editor: DocumentAltererWraplet): void {
